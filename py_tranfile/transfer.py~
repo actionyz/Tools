@@ -1,0 +1,119 @@
+# coding:utf-8
+import thread
+import socket
+import sys
+import threading
+import time
+import os
+import struct
+
+def prints(color,data):
+    dic = {
+    'green':32,
+    'red':31,
+    'yellow':33
+    }
+
+    print("\033[1;"+str(dic[color])+";40m[+]"+data+"\033[0m")
+
+def get_host_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+    finally:
+        s.close()
+
+    return ip
+
+
+
+class Transfer():
+    """docstring for ClassName"""
+    def __init__(self):
+        self.scsocket = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+        
+    def child_fork(self,clientsocket):
+
+        while True:
+            filepath = raw_input("Input file path :")
+            if os.path.isfile(filepath):
+                fhead = struct.pack('128sl', os.path.basename(filepath),os.stat(filepath).st_size)
+                clientsocket.send(fhead)
+                print 'client filepath: {0}'.format(filepath)
+
+                fp = open(filepath, 'rb')
+                while 1:
+                    data = fp.read(1024)
+                    if not data:
+                        print '{0} file send over...'.format(filepath)
+                        break
+                    clientsocket.send(data)
+
+
+    def server(self):
+        port = 9990
+        self.scsocket.bind((get_host_ip(), port))
+        self.scsocket.listen(5)
+        while True:
+            clientsocket,addr = self.scsocket.accept()
+            print "连接地址: %s"% str(addr)
+            thread.start_new_thread(self.child_fork,(clientsocket,))
+            msg = 'xxxx'+ "\r\n"
+            print clientsocket,'1'
+
+    def client(self,ip):
+        port = 9990
+        try:
+            self.scsocket.connect((ip, port))
+        except Exception as e:
+            prints('red', 'con\'t connect to the server %s' % ip)
+            exit()
+        
+
+        while True:
+            fileinfo_size = struct.calcsize('128sl')
+            buf = self.scsocket.recv(fileinfo_size)
+            recvd_size = 0
+            if buf:
+                filename, filesize = struct.unpack('128sl', buf)
+                print filename,filesize
+                newname = './ts_'+filename.strip('\x00')
+                f = open(newname,'wb')
+                while recvd_size < filesize:
+                    msg = self.scsocket.recv(1024)
+                    if  len(msg)<1024:
+                        recvd_size += len(msg)
+                    else:
+                        recvd_size += 1024
+                    f.write(msg)
+                print recvd_size
+            prints('green', 'recv successfully!')
+        self.scsocket.close()
+
+
+def main():
+    argvs = sys.argv
+    if not (len(argvs) == 2 or len(argvs) == 3) :
+        prints('red', 'Input right argv numbers')
+        exit()
+
+    if (argvs[1] != 'recv' and argvs[1] != 'send') :
+        prints('red', 'such as \nxxx.py recv ip  \nxxx.py send ')
+        exit()
+
+    ts = Transfer()
+    if (argvs[1] == 'send'):
+        ts.server()
+    else:
+        ts.client(argvs[2])
+    
+
+
+
+if __name__ == '__main__':
+    main()
+
+
+# 1.py recv ip file
+# 1.py send file
